@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/config"
+	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/configledger"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/k8s/configwriter"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/observability/logging"
 )
@@ -128,10 +129,12 @@ func (s *ClassificationAPIServer) handleConfigRollback(w http.ResponseWriter, r 
 		return
 	}
 
+	ledger := s.openConfigLedger(paths)
 	afterAttempt := s.configActivationAttempt()
 	if !s.writeRouterConfigFiles(w, paths, existingData, backupData) {
 		return
 	}
+	ledgerCommit := s.recordConfigLedgerPending(ledger, paths, backupData, version, configledger.SourceRollback)
 
 	logging.Infof(
 		"Config rolled back to version %s via API: sourceConfigPath=%s, runtimeConfigPath=%s",
@@ -140,7 +143,7 @@ func (s *ClassificationAPIServer) handleConfigRollback(w http.ResponseWriter, r 
 		paths.runtimePath,
 	)
 
-	s.writeRollbackSuccess(w, version, backupData, paths.runtimePath, backupDir, afterAttempt)
+	s.writeRollbackSuccess(w, version, backupData, paths.runtimePath, backupDir, afterAttempt, ledgerCommit)
 }
 
 func (s *ClassificationAPIServer) loadRollbackBackup(
@@ -218,9 +221,11 @@ func (s *ClassificationAPIServer) writeRollbackSuccess(
 	runtimePath string,
 	backupDir string,
 	afterAttempt uint64,
+	ledgerCommit configLedgerCommit,
 ) {
 	etag := configDocumentETag(backupData)
 	runtimeHash, runtimeStatus := s.waitForRuntimeConfigActivation(runtimePath, backupData, afterAttempt)
+	ledgerCommit.observe(runtimeStatus)
 	statusCode := http.StatusOK
 	status := "success"
 	message := fmt.Sprintf("Rolled back to version %s. Router reload is active.", version)

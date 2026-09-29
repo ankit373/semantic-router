@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/config"
+	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/configledger"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/k8s/configwriter"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/observability/logging"
 )
@@ -418,13 +419,16 @@ func (s *ClassificationAPIServer) commitRouterConfigDocument(
 		s.writeErrorResponse(w, http.StatusInternalServerError, "BACKUP_ERROR", fmt.Sprintf("Failed to back up existing config: %v", err))
 		return false
 	}
+	ledger := s.openConfigLedger(paths)
 	afterAttempt := s.configActivationAttempt()
 	if !s.writeRouterConfigFiles(w, paths, previousData, yamlBytes) {
 		return false
 	}
+	ledgerCommit := s.recordConfigLedgerPending(ledger, paths, yamlBytes, version, configledger.SourceAPI)
 
 	etag := configDocumentETag(yamlBytes)
 	runtimeHash, runtimeStatus := s.waitForRuntimeConfigActivation(paths.runtimePath, yamlBytes, afterAttempt)
+	ledgerCommit.observe(runtimeStatus)
 	responseStatus := "success"
 	responseCode := statusCode
 	switch runtimeStatus {

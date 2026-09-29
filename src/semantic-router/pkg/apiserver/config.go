@@ -8,6 +8,7 @@ import (
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/admission"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/cache"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/config"
+	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/configledger"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/contextcompression"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/memory"
 	"github.com/vllm-project/semantic-router/src/semantic-router/pkg/modelinventory"
@@ -26,6 +27,8 @@ type ClassificationAPIServer struct {
 	runtimeConfig         *liveRuntimeConfig
 	runtimeRegistry       *routerruntime.Registry
 	configPath            string // path to the router config file (for read/update/rollback)
+	configLedgerMu        sync.Mutex
+	configLedger          *configledger.Ledger
 	memoryStore           memory.Store
 	knowledgeBaseMapCache *knowledgeBaseMapCache
 	startupStateLoader    func() *startupstatus.State
